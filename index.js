@@ -21,7 +21,7 @@ client.once(Events.ClientReady, readyClient => {
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    if (interaction.commandName === 'createevent') {
+    if (interaction.commandName === 'partiful') {
         await handleCreateEvent(interaction);
     }
 });

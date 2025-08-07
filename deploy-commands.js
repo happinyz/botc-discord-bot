@@ -3,13 +3,13 @@ const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 
 const commands = [
     new SlashCommandBuilder()
-        .setName('createevent')
+        .setName('partiful')
         .setDescription('Create a Discord event from a Partiful event link')
         .addStringOption(option =>
             option.setName('link')
                 .setDescription('The Partiful event link to scrape')
                 .setRequired(true))
-        .setDefaultMemberPermissions('0') // Requires administrator permissions
+        // .setDefaultMemberPermissions('0') // Removed - allow all users
         .toJSON()
 ];
 
