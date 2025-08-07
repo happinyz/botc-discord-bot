@@ -51,22 +51,31 @@ async function handleCreateEvent(interaction) {
         }
 
         // Check if the date is in the future
-        if (eventData.dateTime <= new Date()) {
+        if (eventData.startTime <= new Date()) {
             await interaction.editReply('❌ Event date must be in the future.');
             return;
         }
 
         // Create the scheduled event
         const guild = interaction.guild;
+        const member = await guild.members.fetch(interaction.user.id);
+        const hostInfo = `Hosted by ${member.displayName}`;
+        let fullDescription = `${hostInfo}\n\n${eventData.description}`;
+        
+        // Truncate description to prevent Discord API errors (50035)
+        if (fullDescription.length > 950) {
+            fullDescription = fullDescription.substring(0, 947) + '...';
+        }
+        
         const scheduledEvent = await guild.scheduledEvents.create({
             name: eventData.title,
-            description: eventData.description,
-            scheduledStartTime: eventData.dateTime,
-            scheduledEndTime: new Date(eventData.dateTime.getTime() + 2 * 60 * 60 * 1000), // 2 hours later
+            description: fullDescription,
+            scheduledStartTime: eventData.startTime,
+            scheduledEndTime: eventData.endTime,
             privacyLevel: 2, // GUILD_ONLY
             entityType: 3, // EXTERNAL
             entityMetadata: {
-                location: 'See Partiful link for details'
+                location: partifulLink
             }
         });
 
@@ -82,7 +91,12 @@ async function handleCreateEvent(interaction) {
                 },
                 {
                     name: '🕒 Start Time',
-                    value: `<t:${Math.floor(eventData.dateTime.getTime() / 1000)}:F>`,
+                    value: `<t:${Math.floor(eventData.startTime.getTime() / 1000)}:F>`,
+                    inline: true
+                },
+                {
+                    name: '🕛 End Time',
+                    value: `<t:${Math.floor(eventData.endTime.getTime() / 1000)}:F>`,
                     inline: true
                 },
                 {
@@ -162,22 +176,56 @@ async function scrapePartifulEvent(url) {
         
         console.log(`📅 Found event title: "${title}"`);
         
-        // Extract the datetime from the first <time> tag
+        // Extract the time from nested div structure in the first <time> tag
         const timeElement = $('time').first();
-        const datetimeAttr = timeElement.attr('datetime');
         
-        if (!datetimeAttr) {
-            console.error('❌ Could not find datetime attribute in <time> tag');
+        if (timeElement.length === 0) {
+            console.error('❌ Could not find <time> tag');
             return null;
         }
         
-        console.log(`🕒 Found datetime: ${datetimeAttr}`);
+        // Navigate: <time> -> first child <div> -> first child <div> -> second child <div>
+        const firstDiv = timeElement.children('div').first();
+        if (firstDiv.length === 0) {
+            console.error('❌ Could not find first child <div> in <time> tag');
+            return null;
+        }
         
-        // Parse the ISO 8601 datetime
-        const eventDateTime = new Date(datetimeAttr);
+        const secondDiv = firstDiv.children('div').first();
+        if (secondDiv.length === 0) {
+            console.error('❌ Could not find first child <div> in first div');
+            return null;
+        }
         
-        if (isNaN(eventDateTime.getTime())) {
-            console.error(`❌ Invalid datetime format: ${datetimeAttr}`);
+        const timeDiv = secondDiv.children('div').eq(1); // Second child (index 1)
+        if (timeDiv.length === 0) {
+            console.error('❌ Could not find second child <div> containing time');
+            return null;
+        }
+        
+        const timeText = timeDiv.text().trim();
+        if (!timeText) {
+            console.error('❌ Could not find time text in nested div structure');
+            return null;
+        }
+        
+        console.log(`🕒 Found time text: "${timeText}"`);
+        
+        // Parse the time text and get date from datetime attribute as fallback for date info
+        const datetimeAttr = timeElement.attr('datetime');
+        let baseDate;
+        
+        if (datetimeAttr) {
+            baseDate = new Date(datetimeAttr);
+            console.log(`📅 Using base date from datetime attribute: ${baseDate.toDateString()}`);
+        } else {
+            console.error('❌ Could not find datetime attribute for base date');
+            return null;
+        }
+        
+        const timeInfo = parseTimeText(timeText, baseDate);
+        if (!timeInfo) {
+            console.error(`❌ Could not parse time text: "${timeText}"`);
             return null;
         }
         
@@ -210,16 +258,94 @@ async function scrapePartifulEvent(url) {
             console.log('⚠️ Could not find event description, using default');
         }
         
-        console.log(`✅ Successfully scraped event: "${title}" at ${eventDateTime.toISOString()}`);
+        console.log(`✅ Successfully scraped event: "${title}" from ${timeInfo.startTime.toISOString()} to ${timeInfo.endTime.toISOString()}`);
         
         return {
             title: title,
-            dateTime: eventDateTime,
+            startTime: timeInfo.startTime,
+            endTime: timeInfo.endTime,
             description: description
         };
         
     } catch (error) {
         console.error('❌ Error scraping Partiful event:', error.message);
+        return null;
+    }
+}
+
+function parseTimeText(timeText, baseDate) {
+    try {
+        // Remove extra whitespace and normalize
+        const cleanTimeText = timeText.replace(/\s+/g, '');
+
+        // Check if it's a time range (contains ' - ')
+        if (cleanTimeText.includes('–')) {
+            const [startTimeStr, endTimeStr] = cleanTimeText.split('–');
+            
+            const startTime = parseTimeString(startTimeStr.trim(), baseDate);
+            const endTime = parseTimeString(endTimeStr.trim(), baseDate);
+            
+            if (!startTime || !endTime) {
+                return null;
+            }
+            
+            console.log(`🕰️ Parsed time range: ${startTime.toLocaleTimeString()} - ${endTime.toLocaleTimeString()}`);
+            
+            return {
+                startTime: startTime,
+                endTime: endTime
+            };
+        } else {
+            // Single time - add 3 hours for end time
+            const startTime = parseTimeString(cleanTimeText, baseDate);
+            
+            if (!startTime) {
+                return null;
+            }
+            
+            const endTime = new Date(startTime.getTime() + 3 * 60 * 60 * 1000); // Add 3 hours
+            
+            console.log(`🕰️ Parsed single time: ${startTime.toLocaleTimeString()} (end: ${endTime.toLocaleTimeString()})`);
+            
+            return {
+                startTime: startTime,
+                endTime: endTime
+            };
+        }
+    } catch (error) {
+        console.error('❌ Error parsing time text:', error.message);
+        return null;
+    }
+}
+
+function parseTimeString(timeStr, baseDate) {
+    try {
+        // Match time patterns like "8:30am", "3:00pm", "10:00AM", etc.
+        const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)/);
+        
+        if (!timeMatch) {
+            console.error(`❌ Invalid time format: "${timeStr}"`);
+            return null;
+        }
+        
+        let hours = parseInt(timeMatch[1]);
+        const minutes = parseInt(timeMatch[2]);
+        const ampm = timeMatch[3].toLowerCase();
+        
+        // Convert to 24-hour format
+        if (ampm === 'pm' && hours !== 12) {
+            hours += 12;
+        } else if (ampm === 'am' && hours === 12) {
+            hours = 0;
+        }
+        
+        // Create new date with the parsed time
+        const eventDate = new Date(baseDate);
+        eventDate.setHours(hours, minutes, 0, 0);
+        
+        return eventDate;
+    } catch (error) {
+        console.error(`❌ Error parsing time string "${timeStr}":`, error.message);
         return null;
     }
 }
