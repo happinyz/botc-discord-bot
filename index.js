@@ -7,9 +7,37 @@ const cheerio = require('cheerio');
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildScheduledEvents
+        GatewayIntentBits.GuildScheduledEvents,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
     ]
 });
+
+// Blood on the Clocktower character emote mappings
+const characterEmotes = new Map([
+    ['washerwoman', '<:washerwoman:1406042984650375289> '],
+    ['librarian', '<:librarian:1406042962659512412>'],
+    ['investigator', '<:investigator:1406042961191501917> '],
+    ['chef', '<:chef:1406042956963774564>'],
+    ['empath', '<:empath:1403099321171316746> '],
+    ['fortune teller', '<:fortune_teller:1406042959161594018> '],
+    ['undertaker', '<:undertake:1406042979776598109> '],
+    ['monk', '<:monk:1406042967071789120>'],
+    ['ravenkeeper', '<:ravenkeeper:1406042969701617734>'],
+    ['virgin', '<:virgin:1406042982595035136>'],
+    ['slayer', '<:slayer:1406042971505164428>'],
+    ['soldier', '<:soldier:1406042978727755897>'],
+    ['mayor', '<:mayor:1406042964852998205>'],
+    ['butler', ':butler:'],
+    ['drunk', ':drunk:'],
+    ['recluse', ':recluse:'],
+    ['saint', ':saint:'],
+    ['poisoner', ':poisoner:'],
+    ['scarlet woman', ':scarlet_woman:'],
+    ['spy', ':spy:'],
+    ['baron', ':baron:'],
+    ['imp', ':imp:']
+]);
 
 // When the client is ready, run this code (only once)
 client.once(Events.ClientReady, readyClient => {
@@ -23,6 +51,45 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (interaction.commandName === 'partiful') {
         await handleCreateEvent(interaction);
+    }
+});
+
+// Handle message reactions for character emotes
+client.on(Events.MessageCreate, async message => {
+    // Ignore messages from bots
+    if (message.author.bot) return;
+    
+    // Convert message to lowercase for case-insensitive matching
+    const messageContent = message.content.toLowerCase();
+    
+    // Collect all character matches and their counts
+    const matches = new Map();
+    
+    for (const [character, emote] of characterEmotes) {
+        // Count how many times this character appears in the message
+        const regex = new RegExp(character.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        const occurrences = (messageContent.match(regex) || []).length;
+        
+        if (occurrences > 0) {
+            matches.set(character, { emote, count: occurrences });
+        }
+    }
+    
+    // If we found any matches, react to the message with the emotes
+    if (matches.size > 0) {
+        for (const [character, { emote, count }] of matches) {
+            try {
+                // React with the emote for each occurrence
+                for (let i = 0; i < count; i++) {
+                    await message.react(emote);
+                }
+                console.log(`🎭 Reacted to "${character}" mention ${count} time(s) with ${emote} in ${message.guild.name}`);
+            } catch (error) {
+                console.error(`❌ Error reacting with emote for "${character}":`, error.message);
+                // If custom emote fails, it might be from another server or invalid
+                // Continue with other emotes instead of stopping
+            }
+        }
     }
 });
 
