@@ -278,24 +278,28 @@ async function scrapePartifulEvent(url) {
         
         console.log(`🕒 Found time text: "${timeText}"`);
         
-        // Parse the time text and get date from datetime attribute as fallback for date info
+        // Use datetime attribute as source of truth and convert to California time
         const datetimeAttr = timeElement.attr('datetime');
         console.log('DateTime attr', datetimeAttr);
-        let baseDate;
-        
-        if (datetimeAttr) {
-            baseDate = new Date(datetimeAttr);
-            console.log(`📅 Using base date from datetime attribute: ${baseDate.toDateString()}`);
-        } else {
+
+        if (!datetimeAttr) {
             console.error('❌ Could not find datetime attribute for base date');
             return null;
         }
-        
-        const timeInfo = parseTimeText(timeText, baseDate);
-        if (!timeInfo) {
-            console.error(`❌ Could not parse time text: "${timeText}"`);
-            return null;
-        }
+
+        // Parse the datetime and convert to California timezone
+        const startTime = new Date(datetimeAttr);
+        const californiaStartTime = new Date(startTime.toLocaleString("en-US", {timeZone: "America/Los_Angeles"}));
+
+        // Create end time 3 hours later
+        const californiaEndTime = new Date(californiaStartTime.getTime() + 3 * 60 * 60 * 1000);
+
+        console.log(`📅 Using California time - Start: ${californiaStartTime.toLocaleString()}, End: ${californiaEndTime.toLocaleString()}`);
+
+        const timeInfo = {
+            startTime: californiaStartTime,
+            endTime: californiaEndTime
+        };
         
         // Extract the event description
         // Find the first <div> that's a sibling of the first <h1>
