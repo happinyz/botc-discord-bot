@@ -406,26 +406,12 @@ function parseTimeString(timeStr, baseDate) {
             hours = 0;
         }
 
-        // Create new date with the parsed time in UTC first
-        const eventDate = new Date(baseDate);
-        eventDate.setUTCHours(hours, minutes, 0, 0);
-
-        // Convert to California time (PST/PDT)
-        // Create a date in California timezone
-        const californiaDate = new Date(eventDate.toLocaleString("en-US", {timeZone: "America/Los_Angeles"}));
-
-        // Get the timezone offset difference between California and UTC
-        const utcDate = new Date(eventDate.toLocaleString("en-US", {timeZone: "UTC"}));
-        const offset = californiaDate.getTime() - utcDate.getTime();
-
-        // Apply the offset to get the correct California time
+        // Create date with local time first
         const finalDate = new Date(baseDate);
         finalDate.setHours(hours, minutes, 0, 0);
 
-        // Adjust for California timezone
-        const californiaTime = new Date(finalDate.getTime() - offset);
-
-        return californiaTime;
+        // Then convert to California timezone
+        return new Date(finalDate.toLocaleString("en-US", {timeZone: "America/Los_Angeles"}));
     } catch (error) {
         console.error(`❌ Error parsing time string "${timeStr}":`, error.message);
         return null;
