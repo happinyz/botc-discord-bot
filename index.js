@@ -389,28 +389,43 @@ function parseTimeString(timeStr, baseDate) {
     try {
         // Match time patterns like "8:30am", "3:00pm", "10:00AM", etc.
         const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)/);
-        
+
         if (!timeMatch) {
             console.error(`❌ Invalid time format: "${timeStr}"`);
             return null;
         }
-        
+
         let hours = parseInt(timeMatch[1]);
         const minutes = parseInt(timeMatch[2]);
         const ampm = timeMatch[3].toLowerCase();
-        
+
         // Convert to 24-hour format
         if (ampm === 'pm' && hours !== 12) {
             hours += 12;
         } else if (ampm === 'am' && hours === 12) {
             hours = 0;
         }
-        
-        // Create new date with the parsed time
+
+        // Create new date with the parsed time in UTC first
         const eventDate = new Date(baseDate);
-        eventDate.setHours(hours, minutes, 0, 0);
-        
-        return eventDate;
+        eventDate.setUTCHours(hours, minutes, 0, 0);
+
+        // Convert to California time (PST/PDT)
+        // Create a date in California timezone
+        const californiaDate = new Date(eventDate.toLocaleString("en-US", {timeZone: "America/Los_Angeles"}));
+
+        // Get the timezone offset difference between California and UTC
+        const utcDate = new Date(eventDate.toLocaleString("en-US", {timeZone: "UTC"}));
+        const offset = californiaDate.getTime() - utcDate.getTime();
+
+        // Apply the offset to get the correct California time
+        const finalDate = new Date(baseDate);
+        finalDate.setHours(hours, minutes, 0, 0);
+
+        // Adjust for California timezone
+        const californiaTime = new Date(finalDate.getTime() - offset);
+
+        return californiaTime;
     } catch (error) {
         console.error(`❌ Error parsing time string "${timeStr}":`, error.message);
         return null;
