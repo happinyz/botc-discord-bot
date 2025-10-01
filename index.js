@@ -280,6 +280,7 @@ async function scrapePartifulEvent(url) {
         
         // Parse the time text and get date from datetime attribute as fallback for date info
         const datetimeAttr = timeElement.attr('datetime');
+        console.log('DateTime attr', datetimeAttr);
         let baseDate;
         
         if (datetimeAttr) {
